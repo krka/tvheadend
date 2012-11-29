@@ -189,7 +189,6 @@ static inline ssize_t _process_msg0
   if (sm->sm_type == SMT_START) {
     err = 0;
     timeshift_index_data_t *ti = calloc(1, sizeof(timeshift_index_data_t));
-    ti->pos  = tsf->size;
     ti->data = sm;
     *smp = NULL;
     TAILQ_INSERT_TAIL(&tsf->sstart, ti, link);
