@@ -21,6 +21,8 @@
 
 void serviceprobe_init(void);
 
+void serviceprobe_stop(void);
+
 void serviceprobe_enqueue(struct service *t);
 
 void serviceprobe_delete(struct service *t);

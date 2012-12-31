@@ -31,6 +31,7 @@
 #include "streaming.h"
 #include "service.h"
 #include "dvb/dvb.h"
+#include "exit.h"
 
 /* List of transports to be probed, protected with global_lock */
 static struct service_queue serviceprobe_queue;  
@@ -92,7 +93,7 @@ serviceprobe_thread(void *aux)
   streaming_queue_init(&sq, 0);
 
   err = NULL;
-  while(1) {
+  while(is_running()) {
 
     while((t = TAILQ_FIRST(&serviceprobe_queue)) == NULL) {
 
@@ -239,14 +240,22 @@ serviceprobe_thread(void *aux)
 }
 
 
+static pthread_t ptid;
+
 /**
  *
  */
 void 
 serviceprobe_init(void)
 {
-  pthread_t ptid;
   pthread_cond_init(&serviceprobe_cond, NULL);
   TAILQ_INIT(&serviceprobe_queue);
   pthread_create(&ptid, NULL, serviceprobe_thread, NULL);
 }
+
+void 
+serviceprobe_stop(void)
+{
+  pthread_join(ptid, NULL);
+}
+

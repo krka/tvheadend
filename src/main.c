@@ -60,8 +60,8 @@
 #include "ffdecsa/FFdecsa.h"
 #include "muxes.h"
 #include "config2.h"
+#include "exit.h"
 
-int running;
 time_t dispatch_clock;
 static LIST_HEAD(, gtimer) gtimers;
 pthread_mutex_t global_lock;
@@ -101,7 +101,7 @@ handle_sigpipe(int x)
 static void
 doexit(int x)
 {
-  running = 0;
+  main_shutdown();
 }
 
 static int
@@ -232,7 +232,7 @@ mainloop(void)
   gtimer_t *gti;
   gti_callback_t *cb;
 
-  while(running) {
+  while(is_running()) {
     sleep(1);
     spawn_reaper();
 
@@ -514,7 +514,6 @@ main(int argc, char **argv)
    * Wait for SIGTERM / SIGINT, but only in this thread
    */
 
-  running = 1;
   sigemptyset(&set);
   sigaddset(&set, SIGTERM);
   sigaddset(&set, SIGINT);
@@ -535,6 +534,8 @@ main(int argc, char **argv)
   mainloop();
 
   epg_save();
+  
+  serviceprobe_stop();
 
   tvhlog(LOG_NOTICE, "STOP", "Exiting HTS Tvheadend");
 
