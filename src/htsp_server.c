@@ -1300,8 +1300,6 @@ htsp_method_subscribe(htsp_connection_t *htsp, htsmsg_t *in)
 
   streaming_target_t *st = &hs->hs_input;
 
-  if(normts || timeshiftPeriod != 0)
-    st = hs->hs_tsfix = tsfix_create(st);
 #if ENABLE_TIMESHIFT
   if (timeshiftPeriod != 0) {
     if (timeshiftPeriod == ~0)
@@ -1311,6 +1309,8 @@ htsp_method_subscribe(htsp_connection_t *htsp, htsmsg_t *in)
     st = hs->hs_tshift = timeshift_create(st, timeshiftPeriod);
   }
 #endif
+  if(normts || timeshiftPeriod != 0)
+    st = hs->hs_tsfix = tsfix_create(st);
 
   hs->hs_s = subscription_create_from_channel(ch, weight,
 					      htsp->htsp_logname,
@@ -1619,6 +1619,7 @@ struct {
   { "subscribe",                htsp_method_subscribe,      ACCESS_STREAMING},
   { "unsubscribe",              htsp_method_unsubscribe,    ACCESS_STREAMING},
   { "subscriptionChangeWeight", htsp_method_change_weight,  ACCESS_STREAMING},
+  { "subscriptionSeek",         htsp_method_skip,           ACCESS_STREAMING},
   { "subscriptionSkip",         htsp_method_skip,           ACCESS_STREAMING},
   { "subscriptionSpeed",        htsp_method_speed,          ACCESS_STREAMING},
   { "fileOpen",                 htsp_method_file_open,      ACCESS_RECORDER},

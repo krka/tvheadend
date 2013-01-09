@@ -353,13 +353,39 @@ void *timeshift_reader ( void *p )
 
         /* Skip/Seek */
         } else if (ctrl->sm_type == SMT_SKIP) {
-          skip = sm->sm_data;
+          skip = ctrl->sm_data;
           switch (skip->type) {
             case SMT_SKIP_REL_TIME:
+              tvhlog(LOG_DEBUG, "timeshift", "ts %d skip %"PRId64" requested", ts->id, skip->time);
+
+              /* Must handle live playback case */
+              if (ts->state == TS_LIVE) {
+                pthread_mutex_lock(&ts->rdwr_mutex);
+                if ((cur_file   = timeshift_filemgr_get(ts, ts->ondemand))) {
+                  ts->state  = TS_PLAY;
+                  cur_off    = cur_file->size;
+                  pause_time = cur_file->last;
+                  last_time  = play_time = now;
+                } else {
+                  tvhlog(LOG_ERR, "timeshift", "ts %d failed to get current file", ts->id);
+                  skip->type = SMT_SKIP_ERROR;
+                  streaming_target_deliver2(ts->output, ctrl);
+                  skip = NULL;
+                  break;
+                }
+                pthread_mutex_unlock(&ts->rdwr_mutex);
+              }
+
+              /* Adjust time */
               skip_time = last_time + skip->time;
+
+              /* Clear existing packet */
+              if (sm)
+                streaming_msg_free(sm);
+              sm = NULL;
               break;
             default:
-              tvhlog(LOG_ERR, "timeshift", "invalid/unsupported skip type: %d", skip->type);
+              tvhlog(LOG_ERR, "timeshift", "ts %d invalid/unsupported skip type: %d", ts->id, skip->type);
               skip->type = SMT_SKIP_ERROR;
               streaming_target_deliver2(ts->output, ctrl);
               skip = NULL;
@@ -374,7 +400,7 @@ void *timeshift_reader ( void *p )
     }
 
     /* Done */
-    if (!run || ts->state != TS_PLAY || !cur_file) {
+    if (!run || !cur_file || ((ts->state != TS_PLAY && !skip))) {
       pthread_mutex_unlock(&ts->state_mutex);
       continue;
     }
@@ -455,23 +481,35 @@ void *timeshift_reader ( void *p )
       }
     }
 
+    /* Send skip response */
+    if (skip) {
+      if (sm && sm->sm_type == SMT_PACKET) {
+        th_pkt_t *pkt = sm->sm_data;
+        skip->time = pkt->pkt_pts;
+        skip->type = SMT_SKIP_ABS_TIME;
+        tvhlog(LOG_DEBUG, "timeshift", "ts %d skip to %"PRItime_t" ok", ts->id, skip->time);
+      } else {
+
+        /* Force termination based on skip direction */
+        end = 1;
+        if (skip->time < 0)
+          cur_speed = 0;
+        else
+          cur_speed = 100;
+        // TODO: the below isn't really the right answer!
+
+        /* Report error */
+        skip->type = SMT_SKIP_ERROR;
+        skip       = NULL;
+        tvhlog(LOG_DEBUG, "timeshift", "ts %d skip failed", ts->id);
+      }
+      streaming_target_deliver2(ts->output, ctrl);
+    }
+
     /* Deliver */
     if (sm && (skip ||
                (((cur_speed < 0) && (sm->sm_time >= deliver)) ||
                ((cur_speed > 0) && (sm->sm_time <= deliver))))) {
-
-
-      /* Send skip response */
-      if (skip) {
-        if (sm->sm_type == SMT_PACKET) {
-          th_pkt_t *pkt = sm->sm_data;
-          skip->time = pkt->pkt_pts;
-          skip->type = SMT_SKIP_ABS_TIME;
-          streaming_target_deliver2(ts->output, ctrl);
-        } else {
-          streaming_msg_free(ctrl);
-        }
-      }
 
 #ifdef TSHFT_TRACE
       tvhlog(LOG_DEBUG, "timeshift", "ts %d deliver %"PRItime_t,
